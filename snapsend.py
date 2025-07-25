@@ -10,8 +10,10 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.popup import Popup
 from kivy.clock import Clock
-from kivy.properties import ListProperty, StringProperty, ObjectProperty
+from kivy.properties import ListProperty, StringProperty, ObjectProperty, NumericProperty
 from kivy.core.window import Window
+from kivy.graphics import Line, Color, Rectangle, Ellipse
+from kivy.uix.relativelayout import RelativeLayout
 import socket
 import threading
 import time
@@ -21,6 +23,8 @@ import os
 import zipfile
 import tempfile
 import sys
+from collections import deque
+import platform
 
 kivy.require('2.0.0')
 Window.clearcolor = (1, 1, 1, 1)
@@ -29,6 +33,63 @@ def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.abspath(relative_path)
+
+class SpeedGraphWidget(Widget):
+    """Custom widget to display transfer speed graph"""
+    max_speed = NumericProperty(1.0)  # MB/s
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.speed_history = deque(maxlen=50)  # Keep last 50 speed measurements
+        self.bind(size=self.update_graph, pos=self.update_graph)
+        
+    def add_speed_point(self, speed_mbps):
+        """Add a new speed measurement to the graph"""
+        self.speed_history.append(speed_mbps)
+        if speed_mbps > self.max_speed:
+            self.max_speed = speed_mbps * 1.2  # Add 20% headroom
+        self.update_graph()
+        
+    def update_graph(self, *args):
+        """Redraw the speed graph"""
+        self.canvas.clear()
+        
+        if not self.speed_history or self.width <= 0 or self.height <= 0:
+            return
+            
+        with self.canvas:
+            # Background
+            Color(0.95, 0.95, 0.95, 1)
+            Rectangle(pos=self.pos, size=self.size)
+            
+            # Grid lines
+            Color(0.8, 0.8, 0.8, 1)
+            grid_lines = 5
+            for i in range(grid_lines + 1):
+                y = self.y + (self.height / grid_lines) * i
+                Line(points=[self.x, y, self.x + self.width, y], width=1)
+                
+            # Speed curve
+            if len(self.speed_history) > 1:
+                Color(0.2, 0.6, 1.0, 1)  # Blue color for speed line
+                
+                points = []
+                for i, speed in enumerate(self.speed_history):
+                    x = self.x + (self.width / (len(self.speed_history) - 1)) * i
+                    y = self.y + (speed / max(self.max_speed, 0.1)) * self.height
+                    points.extend([x, y])
+                    
+                if len(points) >= 4:  # Need at least 2 points
+                    Line(points=points, width=2)
+                    
+                # Add dots for recent points
+                Color(0.1, 0.4, 0.8, 1)
+                for i, speed in enumerate(list(self.speed_history)[-10:]):  # Last 10 points
+                    idx = len(self.speed_history) - 10 + i
+                    if idx >= 0:
+                        x = self.x + (self.width / (len(self.speed_history) - 1)) * idx
+                        y = self.y + (speed / max(self.max_speed, 0.1)) * self.height
+                        Ellipse(pos=(x-2, y-2), size=(4, 4))
 
 class DeviceCard(BoxLayout):
     name = StringProperty()
@@ -66,62 +127,92 @@ class FileTransferManager:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1048576)
                 sock.settimeout(30)
                 sock.connect((target_ip, 32769))
+                
                 file_size = os.path.getsize(file_path)
                 file_name = os.path.basename(file_path)
                 file_info = f"{file_name}|{file_size}".encode()
                 sock.send(file_info)
+                
                 ack = sock.recv(3)
                 if ack != b'ACK':
                     raise Exception("No acknowledgment received")
+                
                 sent_size = 0
                 start_time = time.time()
                 last_update = start_time
                 buffer_size = 1048576
+                
+                # Speed calculation variables
+                speed_history = deque(maxlen=10)  # Keep last 10 measurements for smoothing
+                
                 with open(file_path, 'rb') as f:
                     while sent_size < file_size:
+                        chunk_start_time = time.time()
                         data = f.read(buffer_size)
                         if not data:
                             break
+                            
                         bytes_sent = 0
                         while bytes_sent < len(data):
                             n = sock.send(data[bytes_sent:])
                             if n == 0:
                                 raise Exception("Connection broken")
                             bytes_sent += n
+                            
                         sent_size += len(data)
                         current_time = time.time()
-                        if current_time - last_update >= 0.1:
+                        
+                        # Calculate instantaneous speed
+                        chunk_time = current_time - chunk_start_time
+                        if chunk_time > 0:
+                            chunk_speed = len(data) / chunk_time / (1024 * 1024)  # MB/s
+                            speed_history.append(chunk_speed)
+                        
+                        if current_time - last_update >= 0.1:  # Update every 100ms
                             progress = (sent_size / file_size) * 100
-                            elapsed_time = current_time - start_time
-                            if elapsed_time > 0:
-                                speed_bytes = sent_size / elapsed_time
-                                speed_mb = speed_bytes / (1024 * 1024)
-                                speed_text = f"{speed_mb:.1f} MB/s"
+                            
+                            # Calculate average speed from recent measurements
+                            if speed_history:
+                                avg_speed = sum(speed_history) / len(speed_history)
+                                speed_text = f"{avg_speed:.1f} MB/s"
                             else:
+                                avg_speed = 0
                                 speed_text = "0 MB/s"
+                            
                             if progress_callback:
-                                Clock.schedule_once(lambda dt, p=progress, s=speed_text: progress_callback(p, s))
+                                Clock.schedule_once(
+                                    lambda dt, p=progress, s=speed_text, sp=avg_speed: 
+                                    progress_callback(p, s, sp)
+                                )
                             last_update = current_time
+                
+                # Final update
                 if progress_callback:
                     elapsed_time = time.time() - start_time
                     if elapsed_time > 0:
-                        speed_bytes = file_size / elapsed_time
-                        speed_mb = speed_bytes / (1024 * 1024)
-                        speed_text = f"{speed_mb:.1f} MB/s"
+                        final_speed = file_size / elapsed_time / (1024 * 1024)
+                        speed_text = f"{final_speed:.1f} MB/s"
                     else:
+                        final_speed = 0
                         speed_text = "0 MB/s"
-                    Clock.schedule_once(lambda dt: progress_callback(100, speed_text))
+                    Clock.schedule_once(lambda dt: progress_callback(100, speed_text, final_speed))
+                
                 sock.close()
+                
+                # Clean up temporary zip files
                 if file_path.endswith('.zip') and 'temp' in file_path:
                     try:
                         os.unlink(file_path)
                     except:
                         pass
+                        
                 if completion_callback:
                     Clock.schedule_once(lambda dt: completion_callback(True, "File sent successfully"))
+                    
             except Exception as e:
                 if completion_callback:
                     Clock.schedule_once(lambda dt: completion_callback(False, str(e)))
+                    
         threading.Thread(target=send_thread, daemon=True).start()
 
 class DeviceDiscoveryScreen(Screen):
@@ -156,7 +247,15 @@ class DeviceDiscoveryScreen(Screen):
             return "0.0.0.0"
 
     def broadcast_device_name(self):
-        name = "Anirban Singha"
+        # Try to get device name from environment or system
+        try:
+            name = platform.node()
+            if not name:
+                name = os.environ.get('COMPUTERNAME', '') or os.environ.get('HOSTNAME', '')
+            if not name:
+                name = "Unknown Device"
+        except Exception:
+            name = "Unknown Device"
         ip = self.get_local_ip()
         msg = f"{name}|{ip}".encode()
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -190,8 +289,10 @@ class DeviceDiscoveryScreen(Screen):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1048576)
             sock.bind(('', 32769))
             sock.listen(10)
+            
             downloads_path = os.path.join(os.path.expanduser("~"), "Downloads", "SnapSend")
             os.makedirs(downloads_path, exist_ok=True)
+            
             while True:
                 try:
                     client_socket, addr = sock.accept()
@@ -212,49 +313,76 @@ class DeviceDiscoveryScreen(Screen):
             file_name = file_info.split('|')[0]
             file_size = int(file_info.split('|')[1])
             client_socket.send(b'ACK')
+            
             print(f"Receiving {file_name} ({file_size} bytes) from {addr[0]}")
             Clock.schedule_once(lambda dt: self.app.show_receiving_popup(file_name, addr[0]))
+            
             file_path = os.path.join(downloads_path, file_name)
             buffer_size = 1048576
             received_size = 0
             start_time = time.time()
             last_update = start_time
+            
+            # Speed calculation variables
+            speed_history = deque(maxlen=10)
+            
             with open(file_path, 'wb') as f:
                 while received_size < file_size:
+                    chunk_start_time = time.time()
                     remaining = file_size - received_size
                     chunk_size = min(buffer_size, remaining)
                     data = b''
+                    
                     while len(data) < chunk_size:
                         packet = client_socket.recv(chunk_size - len(data))
                         if not packet:
                             break
                         data += packet
+                        
                     if not data:
                         break
+                        
                     f.write(data)
                     received_size += len(data)
                     current_time = time.time()
+                    
+                    # Calculate instantaneous speed
+                    chunk_time = current_time - chunk_start_time
+                    if chunk_time > 0:
+                        chunk_speed = len(data) / chunk_time / (1024 * 1024)  # MB/s
+                        speed_history.append(chunk_speed)
+                    
                     if current_time - last_update >= 0.1:
                         progress = (received_size / file_size) * 100
-                        elapsed_time = current_time - start_time
-                        if elapsed_time > 0:
-                            speed_bytes = received_size / elapsed_time
-                            speed_mb = speed_bytes / (1024 * 1024)
-                            speed_text = f"{speed_mb:.1f} MB/s"
+                        
+                        # Calculate average speed
+                        if speed_history:
+                            avg_speed = sum(speed_history) / len(speed_history)
+                            speed_text = f"{avg_speed:.1f} MB/s"
                         else:
+                            avg_speed = 0
                             speed_text = "0 MB/s"
-                        Clock.schedule_once(lambda dt, p=progress, s=speed_text: self.app.update_receiving_progress(p, s))
+                            
+                        Clock.schedule_once(
+                            lambda dt, p=progress, s=speed_text, sp=avg_speed: 
+                            self.app.update_receiving_progress(p, s, sp)
+                        )
                         last_update = current_time
+            
+            # Final update
             elapsed_time = time.time() - start_time
             if elapsed_time > 0:
-                speed_mb = (file_size / (1024 * 1024)) / elapsed_time
-                speed_text = f"{speed_mb:.1f} MB/s"
+                final_speed = (file_size / (1024 * 1024)) / elapsed_time
+                speed_text = f"{final_speed:.1f} MB/s"
             else:
+                final_speed = 0
                 speed_text = "0 MB/s"
-            Clock.schedule_once(lambda dt: self.app.update_receiving_progress(100, speed_text))
+                
+            Clock.schedule_once(lambda dt: self.app.update_receiving_progress(100, speed_text, final_speed))
             print(f"Successfully received {file_name}")
             Clock.schedule_once(lambda dt: self.app.close_receiving_popup(True, "File received successfully"))
             client_socket.close()
+            
         except Exception as e:
             print(f"Error handling file reception: {e}")
             Clock.schedule_once(lambda dt: self.app.close_receiving_popup(False, str(e)))
@@ -324,6 +452,7 @@ class UploadScreen(Screen):
         folder_name = os.path.basename(folder_path)
         zip_filename = f"{folder_name}.zip"
         self.show_sending_popup(zip_filename)
+        
         def create_and_send():
             try:
                 temp_zip_path = FileTransferManager.create_zip_from_folder(folder_path)
@@ -335,16 +464,18 @@ class UploadScreen(Screen):
                 )
             except Exception as e:
                 Clock.schedule_once(lambda dt: self.on_send_complete(False, str(e)))
+                
         threading.Thread(target=create_and_send, daemon=True).start()
 
     def show_sending_popup(self, filename):
         if self.sending_popup:
             self.sending_popup.dismiss()
+            
         self.sending_popup = Popup(
             content=SendingProgressPopup(),
             title="",
-            size_hint=(0.8, None),
-            height=200,
+            size_hint=(0.85, None),
+            height=280,  # Increased height for graph
             auto_dismiss=False
         )
         self.sending_popup.content.ids.file_name_label.text = filename
@@ -353,10 +484,13 @@ class UploadScreen(Screen):
         self.sending_popup.content.ids.speed_label.text = "0 MB/s"
         self.sending_popup.open()
 
-    def update_sending_progress(self, progress, speed):
+    def update_sending_progress(self, progress, speed, speed_value=0):
         if self.sending_popup:
             self.sending_popup.content.ids.progress_bar.value = progress
             self.sending_popup.content.ids.speed_label.text = speed
+            # Update speed graph
+            if hasattr(self.sending_popup.content.ids, 'speed_graph'):
+                self.sending_popup.content.ids.speed_graph.add_speed_point(speed_value)
 
     def on_send_complete(self, success, message):
         if self.sending_popup:
@@ -389,11 +523,12 @@ class SnapSendApp(App):
     def show_receiving_popup(self, filename, ip):
         if self.receiving_popup:
             self.receiving_popup.dismiss()
+            
         self.receiving_popup = Popup(
             content=ReceivingProgressPopup(),
             title="",
-            size_hint=(0.8, None),
-            height=200,
+            size_hint=(0.85, None),
+            height=280,  # Increased height for graph
             auto_dismiss=False
         )
         self.receiving_popup.content.ids.file_name_label.text = filename
@@ -402,10 +537,13 @@ class SnapSendApp(App):
         self.receiving_popup.content.ids.speed_label.text = "0 MB/s"
         self.receiving_popup.open()
 
-    def update_receiving_progress(self, progress, speed):
+    def update_receiving_progress(self, progress, speed, speed_value=0):
         if self.receiving_popup:
             self.receiving_popup.content.ids.progress_bar.value = progress
             self.receiving_popup.content.ids.speed_label.text = speed
+            # Update speed graph
+            if hasattr(self.receiving_popup.content.ids, 'speed_graph'):
+                self.receiving_popup.content.ids.speed_graph.add_speed_point(speed_value)
 
     def close_receiving_popup(self, success, message):
         if self.receiving_popup:
@@ -421,10 +559,12 @@ class SnapSendApp(App):
         sm.add_widget(DeviceDiscoveryScreen(screen_manager=sm, app=self, name='devices'))
         upload_screen = UploadScreen(name='upload')
         sm.add_widget(upload_screen)
+        
         def on_drop_file(window, file_path, x, y):
             current_screen = sm.current_screen
             if current_screen and hasattr(current_screen, 'on_drop_file'):
                 current_screen.on_drop_file(window, file_path, x, y)
+                
         Window.bind(on_drop_file=on_drop_file)
         Clock.schedule_once(lambda dt: setattr(sm, 'current', 'devices'), 3)
         return sm
