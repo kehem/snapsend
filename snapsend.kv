@@ -55,7 +55,7 @@
     orientation: 'vertical'
     padding: [10, 10]
     size_hint_y: None
-    height: 100
+    height: 80
     spacing: 5
     canvas.before:
         Color:
@@ -67,12 +67,10 @@
     Label:
         text: '[b]'+root.name+'[/b]'
         markup: True
-        font_size: 25
-        font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+        font_size: 22
         color: 0, 0, 0, 1
     Label:
         text: root.ip
-        font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
         font_size: 14
         color: 0.2, 0.2, 0.2, 1
 
@@ -89,7 +87,7 @@
             Label:
                 text: '[b]SnapSend[/b]'
                 markup: True
-                font_name: app.resource_path('fonts/K2D-Bold.ttf')
+                font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
                 font_size: 28
                 color: 0.2, 0.4, 0.7, 1
                 valign: 'middle'
@@ -116,7 +114,7 @@
                 id: name_label
                 text: "[b]Select a device[/b]"
                 markup: True
-                font_name: app.resource_path('fonts/K2D-Bold.ttf')
+                font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
                 font_size: 18
                 color: 0, 0, 0, 1
             Widget:
@@ -150,3 +148,110 @@
                     font_name: app.resource_path('fonts/K2D-Light.ttf')
                     font_size: 16
                     color: 0, 0, 0, 1
+
+
+<SendingProgressPopup>:
+    orientation: 'vertical'
+    padding: 20
+    spacing: 10
+    
+    Label:
+        id: file_name_label
+        text: "filename.txt"
+        font_size: 18
+        font_name: app.resource_path('fonts/K2D-Bold.ttf')
+        color: 0, 0, 0, 1
+        size_hint_y: None
+        height: 30
+        
+    Label:
+        id: status_label
+        text: "Sending..."
+        font_size: 14
+        font_name: app.resource_path('fonts/K2D-Light.ttf')
+        color: 0.3, 0.3, 0.3, 1
+        size_hint_y: None
+        height: 25
+        
+    ProgressBar:
+        id: progress_bar
+        max: 100
+        value: 0
+        size_hint_y: None
+        height: 20
+        
+    BoxLayout:
+        orientation: 'horizontal'
+        size_hint_y: None
+        height: 25
+        Label:
+            text: "Speed:"
+            font_size: 14
+            font_name: app.resource_path('fonts/K2D-Light.ttf')
+            color: 0.3, 0.3, 0.3, 1
+            size_hint_x: None
+            width: 50
+        Label:
+            id: speed_label
+            text: "0 MB/s"
+            font_size: 14
+            font_name: app.resource_path('fonts/K2D-Bold.ttf')
+            color: 0.2, 0.4, 0.7, 1
+            
+    SpeedGraphWidget:
+        id: speed_graph
+        size_hint_y: None
+        height: 80
+
+<ReceivingProgressPopup>:
+    orientation: 'vertical'
+    padding: 20
+    spacing: 10
+    
+    Label:
+        id: file_name_label
+        text: "filename.txt"
+        font_size: 18
+        font_name: app.resource_path('fonts/K2D-Bold.ttf')
+        color: 0, 0, 0, 1
+        size_hint_y: None
+        height: 30
+        
+    Label:
+        id: status_label
+        text: "Receiving..."
+        font_size: 14
+        font_name: app.resource_path('fonts/K2D-Light.ttf')
+        color: 0.3, 0.3, 0.3, 1
+        size_hint_y: None
+        height: 25
+        
+    ProgressBar:
+        id: progress_bar
+        max: 100
+        value: 0
+        size_hint_y: None
+        height: 20
+        
+    BoxLayout:
+        orientation: 'horizontal'
+        size_hint_y: None
+        height: 25
+        Label:
+            text: "Speed:"
+            font_size: 14
+            font_name: app.resource_path('fonts/K2D-Light.ttf')
+            color: 0.3, 0.3, 0.3, 1
+            size_hint_x: None
+            width: 50
+        Label:
+            id: speed_label
+            text: "0 MB/s"
+            font_size: 14
+            font_name: app.resource_path('fonts/K2D-Bold.ttf')
+            color: 0.2, 0.4, 0.7, 1
+            
+    SpeedGraphWidget:
+        id: speed_graph
+        size_hint_y: None
+        height: 80

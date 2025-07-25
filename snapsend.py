@@ -25,6 +25,8 @@ import tempfile
 import sys
 from collections import deque
 import platform
+from kivy.lang import Builder
+
 
 kivy.require('2.0.0')
 Window.clearcolor = (1, 1, 1, 1)
@@ -33,6 +35,10 @@ def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.abspath(relative_path)
+
+# Load the KV file
+# Builder.load_file(resource_path('snapsend.kv'))
+
 
 class SpeedGraphWidget(Widget):
     """Custom widget to display transfer speed graph"""
@@ -94,8 +100,9 @@ class SpeedGraphWidget(Widget):
 class DeviceCard(BoxLayout):
     name = StringProperty()
     ip = StringProperty()
+    
     screen_manager = ObjectProperty()
-
+    
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
             self.screen_manager.current = 'upload'
@@ -222,19 +229,46 @@ class DeviceDiscoveryScreen(Screen):
         super().__init__(**kwargs)
         self.screen_manager = screen_manager
         self.app = app
+        self._last_seen = {}
+        self._device_cards = {}  # Track device cards by entry
         threading.Thread(target=self.listen_for_devices, daemon=True).start()
         threading.Thread(target=self.broadcast_device_name, daemon=True).start()
         threading.Thread(target=self.listen_for_files, daemon=True).start()
+        Clock.schedule_interval(self.check_device_timeouts, 2)
 
     def add_device(self, name, ip):
         entry = f"{name}|{ip}"
-        if entry not in self.discovered_devices:
+        if entry not in self.discovered_devices and entry not in self._device_cards:
             self.discovered_devices.append(entry)
             Clock.schedule_once(lambda dt: self.update_ui(name, ip))
+        # Mark device as seen now
+        self._last_seen[entry] = time.time()
 
     def update_ui(self, name, ip):
-        card = DeviceCard(name=name, ip=ip, screen_manager=self.screen_manager)
-        self.ids.device_grid.add_widget(card)
+        entry = f"{name}|{ip}"
+        # Prevent duplicate cards in UI
+        if entry not in self._device_cards:
+            card = DeviceCard(name=name, ip=ip, screen_manager=self.screen_manager)
+            self.ids.device_grid.add_widget(card)
+            self._device_cards[entry] = card
+
+    def remove_device(self, entry):
+        if entry in self.discovered_devices:
+            self.discovered_devices.remove(entry)
+        # Remove from UI
+        card = self._device_cards.pop(entry, None)
+        if card and card in self.ids.device_grid.children:
+            self.ids.device_grid.remove_widget(card)
+
+    def check_device_timeouts(self, dt):
+        now = time.time()
+        timeout = 6  # seconds
+        for entry in list(self.discovered_devices):
+            if entry not in self._last_seen or now - self._last_seen[entry] > timeout:
+                self.remove_device(entry)
+                self._last_seen.pop(entry, None)
+
+    # (Remove this duplicate __init__ method entirely)
 
     def get_local_ip(self):
         try:
@@ -387,6 +421,8 @@ class DeviceDiscoveryScreen(Screen):
             print(f"Error handling file reception: {e}")
             Clock.schedule_once(lambda dt: self.app.close_receiving_popup(False, str(e)))
             client_socket.close()
+
+
 
 class UploadScreen(Screen):
     device_name = StringProperty("")
