@@ -367,6 +367,12 @@ class UploadScreen(Screen):
         else:
             print(f"Send failed: {message}")
 
+class SendingProgressPopup(BoxLayout):
+    pass
+
+class ReceivingProgressPopup(BoxLayout):
+    pass
+
 class SplashScreen(Screen):
     pass
 
