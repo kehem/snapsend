@@ -1,0 +1,231 @@
+#:kivy 2.0.0
+
+<SplashScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        Label:
+            text: "SnapSend"
+            font_size: 76
+            color: 0.2, 0.4, 0.7, 1
+            font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+            halign: "center"
+            valign: "middle"
+            text_size: self.size
+
+<DeviceDiscoveryScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 10
+        spacing: 10
+        BoxLayout:
+            size_hint_y: None
+            height: 60
+            padding: [10, 0]
+            spacing: 10
+            Label:
+                text: '[b]SnapSend[/b]'
+                markup: True
+                font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+                font_size: 28
+                color: 0.2, 0.4, 0.7, 1
+                valign: 'middle'
+                text_size: self.size
+            Widget:
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint: None, 1
+                width: 30
+                Widget:
+                Image:
+                    source: 'settings_icon.png'
+                    size_hint: 1, None
+                    size: 30, 30
+                    allow_stretch: True
+                Widget:
+        ScrollView:
+            id: device_scroll
+            GridLayout:
+                id: device_grid
+                cols: 1
+                spacing: 10
+                size_hint_y: None
+                height: self.minimum_height
+
+<DeviceCard>:
+    orientation: 'vertical'
+    padding: [10, 10]
+    size_hint_y: None
+    height: 100
+    spacing: 5
+    canvas.before:
+        Color:
+            rgba: 0.93, 0.95, 0.98, 1
+        RoundedRectangle:
+            radius: [10]
+            pos: self.pos
+            size: self.size
+    Label:
+        text: '[b]'+root.name+'[/b]'
+        markup: True
+        font_size: 25
+        font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+        color: 0, 0, 0, 1
+    Label:
+        text: root.ip
+        font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+        font_size: 14
+        color: 0.2, 0.2, 0.2, 1
+
+<UploadScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 10
+        spacing: 10
+        BoxLayout:
+            size_hint_y: None
+            height: 60
+            padding: [10, 0]
+            spacing: 10
+            Label:
+                text: '[b]SnapSend[/b]'
+                markup: True
+                font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+                font_size: 28
+                color: 0.2, 0.4, 0.7, 1
+                valign: 'middle'
+                text_size: self.size
+            Widget:
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint: None, 1
+                width: 30
+                Widget:
+                Image:
+                    id: back_button
+                    source: app.resource_path('back.png')
+                    size_hint: 1, None
+                    size: 30, 30
+                    allow_stretch: True
+                    on_touch_down: root.on_back_button_touch(args[1])
+                Widget:
+        BoxLayout:
+            size_hint_y: None
+            height: 40
+            padding: [10, 0]
+            Label:
+                id: name_label
+                text: "[b]Select a device[/b]"
+                markup: True
+                font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+                font_size: 18
+                color: 0, 0, 0, 1
+            Widget:
+            Label:
+                id: ip_label
+                text: ""
+                font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+                font_size: 14
+                color: 0.2, 0.2, 0.2, 1
+        BoxLayout:
+            orientation: 'vertical'
+            padding: 10
+            spacing: 10
+            BoxLayout:
+                id: upload_area
+                orientation: 'vertical'
+                size_hint: 1, None
+                height: 500
+                padding: 20
+                canvas.before:
+                    Color:
+                        rgba: 0.9, 0.95, 1, 1
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                Label:
+                    id: upload_label
+                    text: "Drag and drop file/folder\\nor\\nClick to select files/folder"
+                    halign: 'center'
+                    valign: 'middle'
+                    font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+                    font_size: 16
+                    color: 0.2, 0.2, 0.2, 1
+                    text_size: self.size
+
+<SendingProgressPopup@Popup>:
+    title: ""
+    size_hint: 0.8, None
+    height: 200
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'vertical'
+        padding: [10, 10]
+        spacing: 5
+        canvas.before:
+            Color:
+                rgba: 0.9, 0.95, 1, 1
+            RoundedRectangle:
+                radius: [10]
+                pos: self.pos
+                size: self.size
+        Label:
+            id: status_label
+            text: "Sending to Device..."
+            font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+            font_size: 18
+            color: 0, 0, 0, 1
+        Label:
+            id: file_name_label
+            text: ""
+            font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+            font_size: 16
+            color: 0, 0, 0, 1
+        ProgressBar:
+            id: progress_bar
+            max: 100
+            value: 0
+        Label:
+            id: speed_label
+            text: "0 MB/s"
+            font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+            font_size: 14
+            color: 0.2, 0.2, 0.2, 1
+
+<ReceivingProgressPopup@Popup>:
+    title: ""
+    size_hint: 0.8, None
+    height: 200
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'vertical'
+        padding: [10, 10]
+        spacing: 5
+        canvas.before:
+            Color:
+                rgba: 0.9, 0.95, 1, 1
+            RoundedRectangle:
+                radius: [10]
+                pos: self.pos
+                size: self.size
+        Label:
+            id: status_label
+            text: "Receiving File..."
+            font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+            font_size: 18
+            color: 0, 0, 0, 1
+        Label:
+            id: file_name_label
+            text: ""
+            font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+            font_size: 16
+            color: 0, 0, 0, 1
+        ProgressBar:
+            id: progress_bar
+            max: 100
+            value: 0
+        Label:
+            id: speed_label
+            text: "0 MB/s"
+            font_name: app.resource_path('fonts/K2D-ExtraBold.ttf')
+            font_size: 14
+            color: 0.2, 0.2, 0.2, 1
